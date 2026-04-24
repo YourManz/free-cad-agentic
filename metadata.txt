@@ -1,0 +1,3 @@
+workbenches=Agentic
+pylibs=anthropic
+min=1.0

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<package format="1" xmlns="https://wiki.freecad.org/Package_Metadata">
+  <name>FreeCAD Agentic</name>
+  <description>Embed Claude inside FreeCAD as a dockable chat panel. Talk to Claude in the same window as the 3D view; Claude can read, create, and parametrically edit the active document (sketches, constraints, pads, pockets, expressions) using FreeCAD's own Python API. Every action is wrapped in a single undo-able transaction, so one Ctrl-Z reverts one Claude action.</description>
+  <version>0.1.0</version>
+  <date>2026-04-23</date>
+  <maintainer email="kobeneilson@gmail.com">Kobe Neilson</maintainer>
+  <license file="LICENSE">LGPL-2.1-or-later</license>
+  <url type="repository" branch="main">https://github.com/YourManz/free-cad-agentic</url>
+  <url type="readme">https://github.com/YourManz/free-cad-agentic/blob/main/README.md</url>
+  <url type="bugtracker">https://github.com/YourManz/free-cad-agentic/issues</url>
+  <author email="kobeneilson@gmail.com">Kobe Neilson</author>
+
+  <content>
+    <workbench>
+      <name>Agentic</name>
+      <description>Chat with Claude to create and edit parametric models.</description>
+      <icon>resources/icon.svg</icon>
+      <classname>AgenticWorkbench</classname>
+    </workbench>
+  </content>
+
+  <depend condition="$version &gt;= 1.0">freecad</depend>
+  <depend type="python" optional="false">anthropic</depend>
+
+  <tag>ai</tag>
+  <tag>claude</tag>
+  <tag>agent</tag>
+  <tag>parametric</tag>
+  <tag>assistant</tag>
+</package>
