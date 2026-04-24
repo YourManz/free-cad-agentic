@@ -13,10 +13,10 @@
 
   <content>
     <workbench>
-      <name>Agentic</name>
+      <classname>AgenticWorkbench</classname>
+      <subdirectory>freecad/freecad_agentic_wb/</subdirectory>
       <description>Chat with Claude to create and edit parametric models.</description>
       <icon>resources/icon.svg</icon>
-      <classname>AgenticWorkbench</classname>
     </workbench>
   </content>
 
