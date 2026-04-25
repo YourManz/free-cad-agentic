@@ -91,6 +91,7 @@ class ChatPanel(QtWidgets.QDockWidget):
         super().__init__("Agentic", parent)
         self.setObjectName(_PANEL_OBJECT_NAME)
         self.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        self.setMinimumWidth(420)
 
         self._history: List[Dict[str, Any]] = []
         self._thread: QtCore.QThread | None = None
@@ -110,7 +111,7 @@ class ChatPanel(QtWidgets.QDockWidget):
 
         self.input = QtWidgets.QTextEdit(root)
         self.input.setPlaceholderText("Ask Claude to inspect, create, or modify the model…  (Ctrl+Enter to send)")
-        self.input.setFixedHeight(90)
+        self.input.setMinimumHeight(160)
         layout.addWidget(self.input)
 
         row = QtWidgets.QHBoxLayout()
