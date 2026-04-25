@@ -154,7 +154,7 @@ class ChatPanel(QtWidgets.QDockWidget):
         self.continue_btn = QtWidgets.QPushButton("Continue", root)
         self.continue_btn.setEnabled(False)
         self.continue_btn.setToolTip("Resume the previous task — only enabled after the model hit max iterations.")
-        self.continue_btn.clicked.connect(self._continue)
+        self.continue_btn.clicked.connect(lambda: self._continue())
         row.addWidget(self.continue_btn)
         self.cancel_btn = QtWidgets.QPushButton("Cancel", root)
         self.cancel_btn.setEnabled(False)
@@ -162,7 +162,7 @@ class ChatPanel(QtWidgets.QDockWidget):
         row.addWidget(self.cancel_btn)
         self.send_btn = QtWidgets.QPushButton("Send", root)
         self.send_btn.setDefault(True)
-        self.send_btn.clicked.connect(self._send)
+        self.send_btn.clicked.connect(lambda: self._send())
         row.addWidget(self.send_btn)
         layout.addLayout(row)
 
@@ -285,7 +285,7 @@ class ChatPanel(QtWidgets.QDockWidget):
     def _send(self, text: str | None = None, append_to_transcript: bool = True):
         if self._thread is not None:
             return
-        if text is None:
+        if not isinstance(text, str):
             text = self.input.toPlainText().strip()
             if not text:
                 return
