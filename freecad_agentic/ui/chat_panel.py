@@ -11,14 +11,41 @@ from __future__ import annotations
 import threading
 from typing import Any, Dict, List
 
+import FreeCAD
 import FreeCADGui
 
+from .. import persistence
 from ..agent.loop import AgentResult, StreamCallbacks, run_turn_stream
 from ..qt import Qt, QtCore, QtGui, QtWidgets, Signal
 from ..tools import dispatch as _dispatch_tool
 
 _PANEL_INSTANCE = None
 _PANEL_OBJECT_NAME = "AgenticChatPanel"
+
+
+class _DocObserver:
+    """Reload chat history when the user activates / opens a different document."""
+
+    def __init__(self, panel: "ChatPanel"):
+        self._panel = panel
+
+    def slotActivateDocument(self, doc):
+        try:
+            self._panel.sync_to_active_document()
+        except Exception:
+            pass
+
+    def slotFinishOpenDocument(self):
+        try:
+            self._panel.sync_to_active_document()
+        except Exception:
+            pass
+
+    def slotCreatedDocument(self, doc):
+        try:
+            self._panel.sync_to_active_document()
+        except Exception:
+            pass
 
 
 class _MainThreadDispatcher(QtCore.QObject):
@@ -99,6 +126,9 @@ class ChatPanel(QtWidgets.QDockWidget):
         self._cancel_event: threading.Event | None = None
         self._streaming_open = False  # whether an <p>Claude: paragraph is currently open
         self._dispatcher = _MainThreadDispatcher(self)  # lives on main thread
+        self._bound_doc_name: str | None = None  # name of doc whose history we hold
+        self._observer = _DocObserver(self)
+        FreeCAD.addDocumentObserver(self._observer)
 
         root = QtWidgets.QWidget(self)
         layout = QtWidgets.QVBoxLayout(root)
@@ -193,7 +223,64 @@ class ChatPanel(QtWidgets.QDockWidget):
         self._history.clear()
         self.transcript.clear()
         self._streaming_open = False
-        self._append_system("conversation cleared")
+        persistence.clear_history(FreeCAD.ActiveDocument)
+        self._append_system("conversation cleared (also wiped from active document)")
+
+    # ------------------- persistence -------------------
+
+    def sync_to_active_document(self):
+        """Called on panel open + on any document switch. Loads the chat history
+        stored in the newly-active doc (if any) into the panel."""
+        if self._thread is not None:
+            return  # don't yank history while a turn is running
+        doc = FreeCAD.ActiveDocument
+        new_name = doc.Name if doc is not None else None
+        if new_name == self._bound_doc_name:
+            return
+        self._bound_doc_name = new_name
+        self._history.clear()
+        self.transcript.clear()
+        self._streaming_open = False
+        if doc is None:
+            self._append_system("no active document — chat will not persist until one is created")
+            return
+        loaded = persistence.load_history(doc)
+        if loaded:
+            self._history = loaded
+            self._render_history()
+            self._append_system(f"loaded {len(loaded)} message(s) from {doc.Label}")
+        else:
+            self._append_system(f"new chat for {doc.Label}")
+
+    def _persist(self):
+        doc = FreeCAD.ActiveDocument
+        if persistence.save_history(doc, self._history):
+            self.status_label.setText(self.status_label.text() + " · saved")
+
+    def _render_history(self):
+        """Replay self._history to the transcript on load."""
+        for msg in self._history:
+            role = msg.get("role")
+            content = msg.get("content")
+            blocks = content if isinstance(content, list) else [{"type": "text", "text": str(content)}]
+            for block in blocks:
+                btype = block.get("type") if isinstance(block, dict) else None
+                if btype == "text":
+                    text = block.get("text", "")
+                    if not text:
+                        continue
+                    if role == "user":
+                        self._append_user(text)
+                    else:
+                        self.transcript.append(f"<p><b>Claude:</b> {_escape(text).replace(chr(10), '<br>')}</p>")
+                elif btype == "tool_use":
+                    name = block.get("name", "?")
+                    args = block.get("input", {})
+                    self._append_tool_note(f"→ {name}({_preview_args(args)})", color="#6a7")
+                elif btype == "tool_result":
+                    if block.get("is_error"):
+                        self._append_error(f"tool error:\n{block.get('content','')}")
+                    # success results are noisy; skip rendering them on replay
 
     def _send(self, text: str | None = None, append_to_transcript: bool = True):
         if self._thread is not None:
@@ -270,6 +357,7 @@ class ChatPanel(QtWidgets.QDockWidget):
         self.send_btn.setEnabled(True)
         self.cancel_btn.setEnabled(False)
         self.continue_btn.setEnabled(result.error == "max_iterations" and not result.cancelled)
+        self._persist()
         if self._thread is not None:
             self._thread.quit()
             self._thread.wait(2000)
@@ -302,4 +390,5 @@ def show_chat_panel():
         main_window.addDockWidget(Qt.RightDockWidgetArea, _PANEL_INSTANCE)
     _PANEL_INSTANCE.show()
     _PANEL_INSTANCE.raise_()
+    _PANEL_INSTANCE.sync_to_active_document()
     return _PANEL_INSTANCE
