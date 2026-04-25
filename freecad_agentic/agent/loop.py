@@ -66,6 +66,47 @@ recompute output means something upstream failed — fix upstream first.
 - **Property introspection:** `obj.PropertiesList`, \
 `obj.getTypeIdOfProperty(name)`, `obj.ExpressionEngine` for bound expressions.
 
+## Sketcher constraint patterns (avoid over-constraining)
+
+Over-constrained errors mean you stacked redundant constraints — e.g. \
+`horizontal` AND `distance_x` on the same line, or constraining every corner \
+with both coincidence and dimensions. The solver reports which constraint \
+indices conflict; if you see "conflicting constraints: 1, 2, 7, 9, 11, 13", \
+those indices are 1-based positions in `sketch.Constraints`. Use \
+`remove_sketch_constraint` to drop the redundant ones (work from the highest \
+index down so earlier indices don't shift).
+
+**Canonical minimal patterns** (use these instead of inventing your own):
+
+- **Rectangle (W × H, corner at origin):** 4 lines via `add_sketch_geometry`. \
+Then constrain: 4 `coincident` between line endpoints to close the loop, \
+1 `coincident` from line0 start to origin (refs `[[0,1],[-1,1]]`), \
+1 `horizontal` on line0, 1 `vertical` on line1, 1 `distance_x` on line0 with \
+value=W, 1 `distance_y` on line1 with value=H. **9 constraints total**, DOF=0.
+- **Centered rectangle:** same 4 lines + 4 coincidences. Then add 2 \
+construction lines (diagonals or center cross) + `symmetric` constraints to \
+the origin instead of one corner-on-origin. Or use `distance_x` from a \
+construction-line midpoint to the origin = 0.
+- **Circle:** 1 circle, 1 `coincident` from circle center to its target point, \
+1 `radius` (or `diameter`) with the value. **3 constraints**, DOF=0.
+- **Hole pattern (4 corner circles in a W×H rect):** add 4 circles, then for \
+each: `coincident` center to a construction point, `equal` radius to the \
+first circle, and just one `radius` constraint on circle 0. Position the \
+construction points with `distance_x`/`distance_y` from the origin.
+
+**Rules of thumb:**
+- Never add `horizontal` + `distance_x` on the same edge — pick one. Same for \
+vertical/distance_y.
+- A standalone line needs exactly 4 constraints (1 horizontal/vertical, 1 \
+length, 2 endpoint positions). A closed N-sided polygon needs roughly \
+N coincidences + N orientation/length constraints + 1 anchor.
+- Always check `dof` in the result of `add_sketch_constraint`. **DOF=0** = \
+fully constrained (good). **DOF>0** = under-constrained (add more). \
+**DOF<0 or "Over-constrained" error** = remove constraints.
+- After an over-constrained error, call `describe_object(sketch)` to inspect \
+the current `Constraints` list, then `remove_sketch_constraint` for the \
+redundant indices reported in the error message.
+
 ## Unrelated but useful: Obsidian Bases
 
 The user's notes vault uses Obsidian Bases (`.base` YAML files). Key facts:

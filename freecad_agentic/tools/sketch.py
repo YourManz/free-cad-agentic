@@ -174,6 +174,29 @@ def add_sketch_constraint(sketch: str, constraints: List[Dict[str, Any]]) -> Dic
     }
 
 
+def remove_sketch_constraint(sketch: str, indices: List[int]) -> Dict[str, Any]:
+    doc = _doc()
+    sk = doc.getObject(sketch)
+    if sk is None or sk.TypeId != "Sketcher::SketchObject":
+        raise KeyError(f"no sketch named {sketch!r}")
+    # Drop highest indices first so earlier indices don't shift mid-loop.
+    ordered = sorted({int(i) for i in indices}, reverse=True)
+    with transaction(f"remove_constraints {sketch}"):
+        for idx in ordered:
+            sk.delConstraint(idx)
+        doc.recompute()
+    try:
+        dof = sk.solve()
+    except Exception:
+        dof = None
+    return {
+        "sketch": sketch,
+        "removed": ordered,
+        "constraint_count": len(sk.Constraints),
+        "dof": dof,
+    }
+
+
 TOOLS = [
     (
         {
@@ -253,5 +276,25 @@ TOOLS = [
             },
         },
         add_sketch_constraint,
+    ),
+    (
+        {
+            "name": "remove_sketch_constraint",
+            "description": "Delete one or more constraints from a sketch by 0-based index into sketch.Constraints. Use this to recover from over-constrained sketch errors — pass the conflicting indices reported by the solver. Returns the new constraint count and DOF.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "sketch": {"type": "string"},
+                    "indices": {
+                        "type": "array",
+                        "items": {"type": "integer", "minimum": 0},
+                        "description": "0-based indices into sketch.Constraints. The error message uses 1-based indices, so subtract 1 from each.",
+                    },
+                },
+                "required": ["sketch", "indices"],
+                "additionalProperties": False,
+            },
+        },
+        remove_sketch_constraint,
     ),
 ]
