@@ -38,6 +38,10 @@ tweaks (one `set_property`) usually don't need a screenshot.
 - Be concise. The user sees your text replies in a dock panel next to the viewport.
 - When you hit an AttributeError or unexpected API shape, call `describe_object` \
 on the object before guessing — your training data may predate FreeCAD 1.1.
+- **Batch tool calls per turn.** You can emit many tool_use blocks in a single \
+response and they all run before you see results. Use this aggressively for \
+independent steps (e.g. add several constraints in one turn, or pad + screenshot \
+together) so a full build finishes in a handful of iterations rather than 30+.
 
 Units are millimetres and degrees unless stated otherwise.
 
@@ -165,7 +169,7 @@ def run_turn_stream(
     history: List[Dict[str, Any]],
     callbacks: StreamCallbacks,
     cancel_event: Optional[threading.Event] = None,
-    max_iterations: int = 12,
+    max_iterations: Optional[int] = None,
     dispatch_tool: Optional[Callable[[str, Dict[str, Any]], Any]] = None,
 ) -> AgentResult:
     """Run one user turn with streaming. history is mutated in place.
@@ -179,6 +183,8 @@ def run_turn_stream(
         cancel_event = threading.Event()
     if dispatch_tool is None:
         dispatch_tool = dispatch
+    if max_iterations is None:
+        max_iterations = preferences.get_max_iterations()
     result = AgentResult(history=history)
 
     def check_cancel():

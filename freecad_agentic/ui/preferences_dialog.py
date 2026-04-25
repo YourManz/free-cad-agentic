@@ -35,6 +35,12 @@ class PreferencesDialog(QtWidgets.QDialog):
         self.max_tokens.setValue(preferences.get_max_tokens())
         form.addRow("Max output tokens", self.max_tokens)
 
+        self.max_iterations = QtWidgets.QSpinBox()
+        self.max_iterations.setRange(4, 200)
+        self.max_iterations.setValue(preferences.get_max_iterations())
+        self.max_iterations.setToolTip("Max model turns per user message before the loop stops. Bump this for big multi-feature builds.")
+        form.addRow("Max iterations", self.max_iterations)
+
         self.system_extra = QtWidgets.QPlainTextEdit(preferences.get_system_prompt_extra())
         self.system_extra.setPlaceholderText("Additional system prompt (optional)")
         self.system_extra.setFixedHeight(100)
@@ -51,6 +57,7 @@ class PreferencesDialog(QtWidgets.QDialog):
         preferences.set_api_key(self.api_key.text().strip())
         preferences.set_model(self.model.currentText().strip())
         preferences.set_max_tokens(self.max_tokens.value())
+        preferences.set_max_iterations(self.max_iterations.value())
         preferences.set_system_prompt_extra(self.system_extra.toPlainText())
         self.accept()
 

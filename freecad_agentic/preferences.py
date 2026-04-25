@@ -9,6 +9,7 @@ _PARAM_PATH = "User parameter:BaseApp/Preferences/Mod/Agentic"
 
 DEFAULT_MODEL = "claude-opus-4-7"
 DEFAULT_MAX_TOKENS = 8192
+DEFAULT_MAX_ITERATIONS = 40
 DEFAULT_SYSTEM_PROMPT_EXTRA = ""
 
 
@@ -41,6 +42,14 @@ def get_max_tokens() -> int:
 
 def set_max_tokens(value: int) -> None:
     _params().SetInt("MaxTokens", int(value))
+
+
+def get_max_iterations() -> int:
+    return int(_params().GetInt("MaxIterations", DEFAULT_MAX_ITERATIONS) or DEFAULT_MAX_ITERATIONS)
+
+
+def set_max_iterations(value: int) -> None:
+    _params().SetInt("MaxIterations", int(value))
 
 
 def get_auto_screenshot() -> bool:
