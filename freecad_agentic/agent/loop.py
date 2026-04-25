@@ -206,6 +206,42 @@ def _strip_image(value: Any) -> Any:
     return value
 
 
+def _normalize_messages(history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Repair / drop malformed content blocks before sending to the API.
+
+    Catches:
+    - text blocks where `text` isn't a string (nested objects, None, missing).
+    - empty content lists (would be a 400).
+    - non-dict junk in content lists.
+    """
+    out: List[Dict[str, Any]] = []
+    for msg in history:
+        content = msg.get("content")
+        if isinstance(content, str):
+            if content:
+                out.append({"role": msg["role"], "content": content})
+            continue
+        if not isinstance(content, list):
+            continue
+        kept: List[Any] = []
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            btype = block.get("type")
+            if btype == "text":
+                text = block.get("text")
+                if isinstance(text, dict) and isinstance(text.get("text"), str):
+                    text = text["text"]  # un-nest accidental wrapping
+                if not isinstance(text, str) or not text.strip():
+                    continue
+                kept.append({"type": "text", "text": text})
+            else:
+                kept.append(block)
+        if kept:
+            out.append({"role": msg["role"], "content": kept})
+    return out
+
+
 def _block_to_dict(block: Any) -> Dict[str, Any]:
     if hasattr(block, "model_dump"):
         return block.model_dump(exclude_none=True)
@@ -258,7 +294,7 @@ def run_turn_stream(
                 max_tokens=max_tokens,
                 system=_cached_system(),
                 tools=_cached_tools(),
-                messages=history,
+                messages=_normalize_messages(history),
             ) as stream:
                 for event in stream:
                     check_cancel()
