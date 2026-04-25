@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Tuple
 
-from . import document, features, properties, sketch, view
+from . import document, features, interaction, properties, sketch, view
 
-_MODULES = [document, sketch, features, properties, view]
+_MODULES = [document, sketch, features, properties, view, interaction]
 
 # (schema_dict, callable)
 Tool = Tuple[Dict[str, Any], Callable[..., Any]]

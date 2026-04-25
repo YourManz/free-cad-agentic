@@ -121,6 +121,11 @@ class ChatPanel(QtWidgets.QDockWidget):
         self.clear_btn = QtWidgets.QPushButton("Clear", root)
         self.clear_btn.clicked.connect(self._clear)
         row.addWidget(self.clear_btn)
+        self.continue_btn = QtWidgets.QPushButton("Continue", root)
+        self.continue_btn.setEnabled(False)
+        self.continue_btn.setToolTip("Resume the previous task — only enabled after the model hit max iterations.")
+        self.continue_btn.clicked.connect(self._continue)
+        row.addWidget(self.continue_btn)
         self.cancel_btn = QtWidgets.QPushButton("Cancel", root)
         self.cancel_btn.setEnabled(False)
         self.cancel_btn.clicked.connect(self._cancel)
@@ -190,15 +195,18 @@ class ChatPanel(QtWidgets.QDockWidget):
         self._streaming_open = False
         self._append_system("conversation cleared")
 
-    def _send(self):
+    def _send(self, text: str | None = None, append_to_transcript: bool = True):
         if self._thread is not None:
             return
-        text = self.input.toPlainText().strip()
-        if not text:
-            return
-        self.input.clear()
-        self._append_user(text)
+        if text is None:
+            text = self.input.toPlainText().strip()
+            if not text:
+                return
+            self.input.clear()
+        if append_to_transcript:
+            self._append_user(text)
         self.send_btn.setEnabled(False)
+        self.continue_btn.setEnabled(False)
         self.cancel_btn.setEnabled(True)
         self.status_label.setText("starting…")
         self._streaming_open = False
@@ -215,6 +223,16 @@ class ChatPanel(QtWidgets.QDockWidget):
         self._worker.status.connect(self._on_status)
         self._worker.finished.connect(self._on_finished)
         self._thread.start()
+
+    def _continue(self):
+        if self._thread is not None or not self._history:
+            return
+        self._append_system("continuing previous task")
+        self._send(
+            "Continue from where you left off. Pick up the plan you were executing; "
+            "do not restart from scratch.",
+            append_to_transcript=False,
+        )
 
     def _cancel(self):
         if self._cancel_event is not None:
@@ -251,6 +269,7 @@ class ChatPanel(QtWidgets.QDockWidget):
         )
         self.send_btn.setEnabled(True)
         self.cancel_btn.setEnabled(False)
+        self.continue_btn.setEnabled(result.error == "max_iterations" and not result.cancelled)
         if self._thread is not None:
             self._thread.quit()
             self._thread.wait(2000)
