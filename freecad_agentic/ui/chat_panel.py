@@ -15,9 +15,42 @@ import FreeCADGui
 
 from ..agent.loop import AgentResult, StreamCallbacks, run_turn_stream
 from ..qt import Qt, QtCore, QtGui, QtWidgets, Signal
+from ..tools import dispatch as _dispatch_tool
 
 _PANEL_INSTANCE = None
 _PANEL_OBJECT_NAME = "AgenticChatPanel"
+
+
+class _MainThreadDispatcher(QtCore.QObject):
+    """Lives on the GUI main thread. Worker thread calls run_tool(), which emits
+    a queued signal so the actual FreeCAD API call happens on the main thread,
+    then blocks on a threading.Event until the result is set. FreeCAD's Python
+    bindings touch Coin3D/Qt and freeze if called from a non-main thread.
+    """
+
+    _request = Signal(str, object, object)  # name, args, holder dict
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # QueuedConnection ensures the slot runs on this object's thread (main),
+        # even when the signal is emitted from the worker thread.
+        self._request.connect(self._on_request, Qt.QueuedConnection)
+
+    def run_tool(self, name: str, args: Dict[str, Any]) -> Any:
+        holder: Dict[str, Any] = {"event": threading.Event(), "result": None, "error": None}
+        self._request.emit(name, args, holder)
+        holder["event"].wait()
+        if holder["error"] is not None:
+            raise holder["error"]
+        return holder["result"]
+
+    def _on_request(self, name: str, args: Dict[str, Any], holder: Dict[str, Any]):
+        try:
+            holder["result"] = _dispatch_tool(name, args)
+        except Exception as exc:
+            holder["error"] = exc
+        finally:
+            holder["event"].set()
 
 
 class _AgentWorker(QtCore.QObject):
@@ -28,11 +61,12 @@ class _AgentWorker(QtCore.QObject):
     status = Signal(str)
     finished = Signal(object)  # AgentResult
 
-    def __init__(self, user_text: str, history: List[Dict[str, Any]], cancel_event: threading.Event):
+    def __init__(self, user_text: str, history: List[Dict[str, Any]], cancel_event: threading.Event, dispatcher: "_MainThreadDispatcher"):
         super().__init__()
         self._user_text = user_text
         self._history = history
         self._cancel_event = cancel_event
+        self._dispatcher = dispatcher
 
     def run(self):
         cb = StreamCallbacks(
@@ -42,7 +76,13 @@ class _AgentWorker(QtCore.QObject):
             on_tool_result=lambda n, r, e: self.tool_result.emit(n, r, e),
             on_status=self.status.emit,
         )
-        result = run_turn_stream(self._user_text, self._history, cb, cancel_event=self._cancel_event)
+        result = run_turn_stream(
+            self._user_text,
+            self._history,
+            cb,
+            cancel_event=self._cancel_event,
+            dispatch_tool=self._dispatcher.run_tool,
+        )
         self.finished.emit(result)
 
 
@@ -57,6 +97,7 @@ class ChatPanel(QtWidgets.QDockWidget):
         self._worker: _AgentWorker | None = None
         self._cancel_event: threading.Event | None = None
         self._streaming_open = False  # whether an <p>Claude: paragraph is currently open
+        self._dispatcher = _MainThreadDispatcher(self)  # lives on main thread
 
         root = QtWidgets.QWidget(self)
         layout = QtWidgets.QVBoxLayout(root)
@@ -163,7 +204,7 @@ class ChatPanel(QtWidgets.QDockWidget):
 
         self._cancel_event = threading.Event()
         self._thread = QtCore.QThread(self)
-        self._worker = _AgentWorker(text, self._history, self._cancel_event)
+        self._worker = _AgentWorker(text, self._history, self._cancel_event, self._dispatcher)
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
         self._worker.text_delta.connect(self._stream_text)

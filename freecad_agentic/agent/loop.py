@@ -166,10 +166,19 @@ def run_turn_stream(
     callbacks: StreamCallbacks,
     cancel_event: Optional[threading.Event] = None,
     max_iterations: int = 12,
+    dispatch_tool: Optional[Callable[[str, Dict[str, Any]], Any]] = None,
 ) -> AgentResult:
-    """Run one user turn with streaming. history is mutated in place."""
+    """Run one user turn with streaming. history is mutated in place.
+
+    `dispatch_tool` lets the caller route tool execution through a thread
+    marshaller — required when this loop runs on a worker thread but the tools
+    must execute on the GUI main thread (FreeCAD's API is not thread-safe).
+    Defaults to in-process dispatch.
+    """
     if cancel_event is None:
         cancel_event = threading.Event()
+    if dispatch_tool is None:
+        dispatch_tool = dispatch
     result = AgentResult(history=history)
 
     def check_cancel():
@@ -221,7 +230,7 @@ def run_turn_stream(
                 result.tool_calls += 1
                 callbacks.on_tool_start(name, args)
                 try:
-                    tool_result = dispatch(name, args)
+                    tool_result = dispatch_tool(name, args)
                 except Exception as exc:
                     tb = traceback.format_exc(limit=3)
                     msg = f"{type(exc).__name__}: {exc}\n{tb}"
